@@ -31,11 +31,13 @@ const dbConfig = (() => {
     }
 
     return {
-        host: process.env.DATABASE_HOST,
+        host: "127.0.0.1",
+
         port: 3050,
         database: process.env.DATABASE_NAME,
         user: process.env.DATABASE_USER,
         password: process.env.DATABASE_PASSWORD,
+        wireCrypt: "Disabled",
         lowercase_keys: false,
         role: null,
         pageSize: 4096,
