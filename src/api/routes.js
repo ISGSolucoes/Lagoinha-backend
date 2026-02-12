@@ -1,6 +1,5 @@
 import express from 'express';
 import members from '../db/members.js';
-import usersRouter from '../db/users.js';
 import auth from '../db/auth.js';
 import church from './church.js';
 import situation from './situation.js';

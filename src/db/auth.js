@@ -1,108 +1,178 @@
-import { Router } from 'express';
-import { cadastrarUsuario, verificarCredenciais } from './users.js';
-import members from './members.js';
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
+// src/db/auth.js
+import express from "express";
+import * as users from "./users.js";
 
-dotenv.config(); // Esta linha é essencial para carregar as variáveis
+const router = express.Router();
 
-const router = Router();
+/**
+ * POST /auth/cadastro
+ * Body esperado (mínimo):
+ * {
+ *   "nome": "Fulano",
+ *   "email": "fulano@teste.com",
+ *   "senha": "123456",
+ *   "cd_cidade": 1,
+ *   "cd_situacao": 1,
+ *   "cd_tipo": 1 (opcional)
+ * }
+ */
+router.post("/cadastro", async (req, res) => {
+  try {
+    // logs úteis para iniciante (pode remover depois)
+    console.log("CONTENT-TYPE =>", req.headers["content-type"]);
+    console.log("BODY RECEBIDO =>", req.body);
 
-// Função para gerar token JWT (consistente com a do users.js)
-const gerarTokenJWT = (userId, userType) => {
-    console.log(process.env.JWT_SECRET); // Deve mostrar sua chave
-    if (!process.env.JWT_SECRET) {
-        throw new Error('Chave JWT_SECRET não configurada no .env');
+    const dados = req.body || {};
+
+    // validação básica
+    if (!dados.nome || !dados.email || !dados.senha) {
+      return res.status(400).json({
+        erro: "Campos obrigatórios: nome, email, senha",
+      });
     }
 
-    return jwt.sign(
-        {
-            sub: userId,
-            tipo: userType,
-            iat: Math.floor(Date.now() / 1000)
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
-    );
+    // obrigatórios do banco
+if (
+  dados.cd_cidade === null || 
+  dados.cd_cidade === undefined ||
+  dados.cd_situacao === null || 
+  dados.cd_situacao === undefined ||
+  dados.cd_igreja === null ||
+  dados.cd_igreja === undefined
+) {
+  return res.status(400).json({
+    erro: "Campos obrigatórios: cd_cidade, cd_situacao, cd_igreja",
+  });
 }
 
-router.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                erro: 'Credenciais incompletas',
-                detalhes: 'Email e senha são obrigatórios'
-            });
-        }
-
-        // 1. Verifica as credenciais
-        const user = await verificarCredenciais(email, password);
-        console.log('DAdos login: ', user)
-        
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                erro: 'Credenciais inválidas',
-                detalhes: 'Usuário não encontrado ou senha incorreta'
-            });
-        }
-
-        // 2. Gera o token JWT (agora incluindo o tipo do usuário)
-        const token = gerarTokenJWT(user.id, user.tipo);
-
-        // 3. Retorna os dados
-        res.json({
-            success: true,
-            token,
-            user: {
-                id: user.id,
-                name: user.nome,
-                email: user.email,
-                tipo: user.cd_tipo
-            }
-        });
-
-    } catch (error) {
-        console.error('Erro no login:', error);
-        res.status(500).json({
-            success: false,
-            erro: 'Falha no login',
-            detalhes: error.message
-        });
+    // default cd_tipo
+    if (dados.cd_tipo === null || dados.cd_tipo === undefined) {
+      dados.cd_tipo = 1;
     }
-})
 
-router.post('/cadastro', async (req, res) => {
-    try {
-        const { cd_tipo, ...dados } = req.body;
-
-        console.log(req.body)
-
-        if (cd_tipo !== null && cd_tipo !== undefined) {
-            if (cadastrarUsuario) {
-                const resultado = await cadastrarUsuario({ ...dados, cd_tipo });
-                return res.status(201).json(resultado);
-            } else {
-                throw new Error('Função cadastrarUsuario não disponível');
-            }
-        } else {
-            if (members.cadastrarMembro) {
-                const resultado = await members.cadastrarMembro(dados);
-                return res.status(201).json(resultado);
-            } else {
-                throw new Error('Função cadastrarMembro não disponível');
-            }
-        }
-    } catch (error) {
-        console.error('Erro no cadastro:', error);
-        return res.status(500).json({
-            erro: 'Falha ao cadastrar',
-            detalhes: error.message
-        });
+    // garante que a função existe
+    if (typeof users.cadastrarUsuario !== "function") {
+      return res.status(500).json({
+        erro: "Falha ao cadastrar",
+        detalhes:
+          "Função users.cadastrarUsuario não encontrada. Verifique o arquivo src/db/users.js (export).",
+      });
     }
-})
+
+    // ✅ passa o body inteiro (inclui cd_cidade e cd_situacao)
+    const resultado = await users.cadastrarUsuario(dados);
+
+    return res.status(201).json(resultado);
+  } catch (error) {
+    console.error("Erro no cadastro:", error);
+    return res.status(500).json({
+      erro: "Falha ao cadastrar",
+      detalhes: error.message,
+    });
+  }
+});
+
+/**
+ * POST /auth/login
+ * Body esperado:
+ * {
+ *   "email": "fulano@teste.com",
+ *   "senha": "123456"
+ * }
+ */
+router.post("/login", async (req, res) => {
+  try {
+    const { email, senha } = req.body || {};
+
+    console.log("email", email);
+    console.log("senha", senha);
+
+    if (!email || !senha) {
+      return res.status(400).json({
+        erro: "Campos obrigatórios: email, senha",
+      });
+    }
+
+    // usa loginUsuario do users.js
+    if (typeof users.loginUsuario === "function") {
+      const resultado = await users.loginUsuario({ email, senha });
+
+      if (!resultado) {
+        return res.status(401).json({ erro: "Email ou senha inválidos" });
+      }
+
+      // segurança: nunca devolver senha
+      const usuarioSeguro = { ...resultado };
+      delete usuarioSeguro.senha;
+      delete usuarioSeguro.SENHA;
+      delete usuarioSeguro.password;
+      delete usuarioSeguro.PASSWORD;
+      delete usuarioSeguro.password_hash;
+      delete usuarioSeguro.PASSWORD_HASH;
+
+      return res.status(200).json(usuarioSeguro);
+    }
+
+    return res.status(500).json({
+      erro: "Falha no login",
+      detalhes:
+        "Função users.loginUsuario não encontrada. Crie/exporte em src/db/users.js.",
+    });
+  } catch (error) {
+    console.error("Erro no login:", error);
+    return res.status(500).json({
+      erro: "Falha no login",
+      detalhes: error.message,
+    });
+  }
+});
+
+/**
+ * GET /auth/perfil?email=...
+ * (modo simples para iniciante — depois evoluímos para token)
+ */
+router.get("/perfil", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    if (!email) {
+      return res.status(400).json({
+        erro: "Informe o email na query: /auth/perfil?email=...",
+      });
+    }
+
+    if (typeof users.buscarUsuarioPorEmail !== "function") {
+      return res.status(500).json({
+        erro: "Falha ao buscar perfil",
+        detalhes:
+          "Função users.buscarUsuarioPorEmail não encontrada. Crie/exporte em src/db/users.js.",
+      });
+    }
+
+    const usuario = await users.buscarUsuarioPorEmail(email);
+
+    if (!usuario) {
+      return res.status(404).json({ erro: "Usuário não encontrado" });
+    }
+
+    // segurança: nunca devolver senha/senha_hash
+    const usuarioSeguro = { ...usuario };
+    delete usuarioSeguro.senha;
+    delete usuarioSeguro.SENHA;
+    delete usuarioSeguro.password;
+    delete usuarioSeguro.PASSWORD;
+    delete usuarioSeguro.password_hash;
+    delete usuarioSeguro.PASSWORD_HASH;
+
+    return res.status(200).json(usuarioSeguro);
+  } catch (error) {
+    console.error("Erro ao buscar perfil:", error);
+    return res.status(500).json({
+      erro: "Falha ao buscar perfil",
+      detalhes: error.message,
+    });
+  }
+});
 
 export default router;
