@@ -136,8 +136,8 @@ export async function cadastrarUsuario(dados) {
 // ============================
 // LOGIN
 // ============================
-export async function loginUsuario({ email, senha }) {
-  if (!email || !senha) {
+export async function loginUsuario({ email }) {
+  if (!email) {
     throw new Error("email e senha são obrigatórios");
   }
 
@@ -150,13 +150,13 @@ export async function loginUsuario({ email, senha }) {
       CD_SITUACAO,
       CD_CIDADE,
       CD_IGREJA_ATUAL,
-      CD_IGREJA
+      CD_IGREJA,
+      SENHA
     FROM USUARIO
     WHERE EMAIL = ?
-      AND SENHA = ?
   `;
 
-  const res = await executeQuery(sql, [email, senha]);
+  const res = await executeQuery(sql, [email]);
 
   if (!res || res.length === 0) return null;
 

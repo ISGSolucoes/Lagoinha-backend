@@ -1,6 +1,7 @@
 // src/db/auth.js
 import express from "express";
 import * as users from "./users.js";
+import { criptografar, descriptografar } from "../config/criptografia.js"
 
 const router = express.Router();
 
@@ -96,11 +97,16 @@ router.post("/login", async (req, res) => {
 
     // usa loginUsuario do users.js
     if (typeof users.loginUsuario === "function") {
-      const resultado = await users.loginUsuario({ email, senha });
+      const resultado = await users.loginUsuario({ email });   
 
-      if (!resultado) {
+      const senhaDescript = descriptografar(resultado.SENHA);
+
+      
+      if (senhaDescript !== senha) {
         return res.status(401).json({ erro: "Email ou senha inválidos" });
       }
+
+
 
       // segurança: nunca devolver senha
       const usuarioSeguro = { ...resultado };
@@ -174,5 +180,27 @@ router.get("/perfil", async (req, res) => {
     });
   }
 });
+
+router.get("/descriptografar", async (req, res) => {
+  try {
+    const { password } = req.body || {};
+
+    console.log("password", password);
+
+    const senha_descript = descriptografar(password);
+
+    console.log("senha_descript", senha_descript);
+    
+    return res.status(200).json(senha_descript);
+    
+  } catch (error) {
+    console.error("Falha ao tentar descriptografar:", error);
+    return res.status(500).json({
+      erro: "Falha ao tentar descriptografar",
+      detalhes: error.message,
+    });
+  }
+});
+
 
 export default router;
