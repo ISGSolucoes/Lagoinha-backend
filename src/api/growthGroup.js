@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const query = `
       SELECT a.CD_IGREJA as cd_supervisao,
              b.fantasia as nome_supervisao,
@@ -95,13 +95,13 @@ router.get('/:id', async (req, res) => {
     const result = await executeQuery(query, [id]);
 
     console.log('Result select Gc: ', result)
-    
+
     if (result.length === 0) {
       return res.status(404).json({ erro: 'Gc não encontrada' });
     }
-    
+
     return res.json(result[0]);
-    
+
   } catch (error) {
     console.error('Erro ao buscar gc:', error);
     return res.status(500).json({
@@ -115,71 +115,79 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      FANTASIA,
-      RAZAO_SOCIAL,
-      CNPJ,
+      CD_IGREJA,
+      NOME,
       ENDERECO,
-      CEP,
+      NRO,
+      BAIRRO,
       CD_CIDADE,
-      fone,
-      email,
-      CD_SITUACAO
+      CEP,
+      CD_SITUACAO,
+      CD_LIDER,
+      EMAIL,
+      DT_REUNIAO,
+      CD_COLIDER,
+      DESCRICAO
     } = req.body;
 
     // Validação básica
-    if (!FANTASIA || !CNPJ || !CD_CIDADE || !CD_SITUACAO) {
-      return res.status(400).json({ 
+    if (!CD_IGREJA || !CD_GC || !NOME || !CD_CIDADE || !CD_SITUACAO) {
+      return res.status(400).json({
         erro: 'Campos obrigatórios não preenchidos',
-        camposObrigatorios: ['FANTASIA', 'CNPJ', 'CD_CIDADE', 'CD_SITUACAO']
+        camposObrigatorios: ['CD_IGREJA', 'CD_GC', 'NOME', 'CD_CIDADE', 'CD_SITUACAO']
       });
     }
 
 
-    const queryAux = `SELECT COALESCE(CD_IGREJA,0) + 1 AS NEWCD_IGREJA FROM IGREJA`;
-    const resultSelect = await executeQuery(queryAux, []);
-    const CD_IGREJA = resultSelect[0].NEWCD_IGREJA;
+    const queryAux = `SELECT COALESCE(CD_GC,0) + 1 AS NEWCD_GC FROM GRUPO_CRESCIMENTO WHERE CD_IGREJA = ? `;
+    const resultSelect = await executeQuery(queryAux, [CD_IGREJA]);
+    const CD_GC = resultSelect[0].NEWCD_GC;
 
     const query = `
-      INSERT INTO IGREJA 
-        (CD_IGREJA, FANTASIA, RAZAO_SOCIAL, CNPJ, ENDERECO, CEP, 
-         CD_CIDADE, fone, email, CD_SITUACAO, DATA_CADASTRO)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      RETURNING CD_IGREJA as ID, FANTASIA`;
+      INSERT INTO GRUPO_CRESCIMENTO 
+        (CD_IGREJA, CD_GC, NOME, ENDERECO, NRO, BAIRRO, CD_CIDADE,
+         CEP, CD_SITUACAO, CD_LIDER, EMAIL, DT_REUNIAO, CD_COLIDER, DESCRICAO)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      RETURNING CD_GC as ID, NOME`;
 
     const result = await executeQuery(query, [
       CD_IGREJA,
-      FANTASIA,
-      RAZAO_SOCIAL || FANTASIA,
-      CNPJ,
-      ENDERECO || '',
-      CEP || '',
+      CD_GC,
+      NOME,
+      ENDERECO,
+      NRO,
+      BAIRRO,
       CD_CIDADE,
-      fone || '',
-      email || '',
-      CD_SITUACAO
+      CEP,
+      CD_SITUACAO,
+      CD_LIDER,
+      EMAIL,
+      DT_REUNIAO,
+      CD_COLIDER,
+      DESCRICAO
     ]);
 
     // Invalidar cache
     cache.gcs = null;
-    
+
     return res.status(201).json({
       success: true,
-      message: 'Igreja cadastrada com sucesso',
+      message: 'GC cadastrado com sucesso',
       data: result[0]
     });
 
   } catch (error) {
-    console.error('Erro ao criar igreja:', error);
-    
+    console.error('Erro ao criar GC:', error);
+
     // Verificar se é erro de chave única (CNPJ duplicado)
     if (error.message && error.message.includes('unique constraint')) {
       return res.status(400).json({
-        erro: 'CNPJ já cadastrado no sistema'
+        erro: 'GC já cadastrado no sistema'
       });
     }
-    
+
     return res.status(500).json({
-      erro: 'Falha ao criar igreja',
+      erro: 'Falha ao criar GC',
       detalhes: error.message
     });
   }
@@ -190,117 +198,132 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      FANTASIA,
-      RAZAO_SOCIAL,
-      CNPJ,
+      CD_IGREJA,
+      CD_GC,
+      NOME,
       ENDERECO,
-      CEP,
+      NRO,
+      BAIRRO,
       CD_CIDADE,
-      fone,
-      email,
-      CD_SITUACAO
+      CEP,
+      CD_SITUACAO,
+      CD_LIDER,
+      EMAIL,
+      DT_REUNIAO,
+      CD_COLIDER,
+      DESCRICAO
     } = req.body;
 
-    // Verificar se a igreja existe
-    const checkQuery = 'SELECT CD_IGREJA FROM IGREJA WHERE CD_IGREJA = ?';
-    const checkResult = await executeQuery(checkQuery, [id]);
-    
+    // Verificar se a GC existe
+    const checkQuery = 'SELECT CD_GC FROM GRUPO_CRESCIMENTO WHERE CD_IGREJA = ? AND CD_GC = ?';
+    const checkResult = await executeQuery(checkQuery, [CD_IGREJA, CD_GC]);
+
     if (checkResult.length === 0) {
-      return res.status(404).json({ erro: 'Igreja não encontrada' });
+      return res.status(404).json({ erro: 'GC não encontrado' });
     }
 
     console.log('checkResult: ', checkResult)
 
     const query = `
-      UPDATE IGREJA SET
-        FANTASIA = ?,
-        RAZAO_SOCIAL = ?,
-        CNPJ = ?,
+      UPDATE GRUPO_CRESCIMENTO SET
+        NOME = ?,
         ENDERECO = ?,
-        CEP = ?,
+        NRO = ?,
+        BAIRRO = ?,
         CD_CIDADE = ?,
-        fone = ?,
-        email = ?,
+        CEP = ?,
         CD_SITUACAO = ?,
+        CD_LIDER = ?,
+        EMAIL = ?,
+        DT_REUNIAO = ?,
+        CD_COLIDER = ?,
+        DESCRICAO = ?,
         DATA_ATUALIZACAO = CURRENT_TIMESTAMP
       WHERE CD_IGREJA = ?
+        AND CD_GC = ? 
       RETURNING CD_IGREJA as ID, FANTASIA`;
 
     const result = await executeQuery(query, [
-      FANTASIA,
-      RAZAO_SOCIAL || FANTASIA,
-      CNPJ,
-      ENDERECO || '',
-      CEP || '',
+      NOME,
+      ENDERECO,
+      NRO,
+      BAIRRO,
       CD_CIDADE,
-      fone || '',
-      email || '',
+      CEP,
       CD_SITUACAO,
-      id
+      CD_LIDER,
+      EMAIL,
+      DT_REUNIAO,
+      CD_COLIDER,
+      DESCRICAO,
+      CD_IGREJA,
+      CD_GC
     ]);
 
-    console.log('Retorno atualizacao igreja: ', result)
+    console.log('Retorno atualizacao GC: ', result)
 
     // Invalidar cache
     cache.gcs = null;
-    
+
     return res.json({
       success: true,
-      message: 'Igreja atualizada com sucesso',
+      message: 'GC atualizado com sucesso',
       data: result[0]
     });
 
   } catch (error) {
-    console.error('Erro ao atualizar igreja:', error);
-    
+    console.error('Erro ao atualizar GC:', error);
+
     if (error.message && error.message.includes('unique constraint')) {
       return res.status(400).json({
-        erro: 'CNPJ já cadastrado no sistema'
+        erro: 'GC já cadastrado no sistema'
       });
     }
-    
+
     return res.status(500).json({
-      erro: 'Falha ao atualizar igreja',
+      erro: 'Falha ao atualizar GC',
       detalhes: error.message
     });
   }
 });
 
-// DELETE - Excluir igreja (marcar como inativa)
+// DELETE - Excluir GC (marcar como inativa)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
     // Verificar se a igreja existe
-    const checkQuery = 'SELECT CD_IGREJA FROM IGREJA WHERE CD_IGREJA = ?';
-    const checkResult = await executeQuery(checkQuery, [id]);
-    
+    const checkQuery = 'SELECT CD_GC FROM GRUPO_CRESCIMENTO WHERE CD_IGREJA = ? AND CD_GC = ?';
+    const checkResult = await executeQuery(checkQuery, [CD_IGREJA, CD_GC]);
+
+
     if (checkResult.length === 0) {
-      return res.status(404).json({ erro: 'Igreja não encontrada' });
+      return res.status(404).json({ erro: 'GC não encontrada' });
     }
 
     // Em vez de excluir, podemos marcar como inativa
     const query = `
-      UPDATE IGREJA 
+      UPDATE GRUPO_CRESCIMENTO 
       SET CD_SITUACAO = 2, DATA_ATUALIZACAO = CURRENT_TIMESTAMP
       WHERE CD_IGREJA = ?
-      RETURNING CD_IGREJA as ID, FANTASIA`;
+        AND CD_GC = ? 
+      RETURNING CD_GC as ID, NOME`;
 
-    const result = await executeQuery(query, [id]);
+    const result = await executeQuery(query, [CD_IGREJA, CD_GC]);
 
     // Invalidar cache
     cache.gcs = null;
-    
+
     return res.json({
       success: true,
-      message: 'Igreja excluída com sucesso',
+      message: 'GC excluída com sucesso',
       data: result[0]
     });
 
   } catch (error) {
-    console.error('Erro ao excluir igreja:', error);
+    console.error('Erro ao excluir GC:', error);
     return res.status(500).json({
-      erro: 'Falha ao excluir igreja',
+      erro: 'Falha ao excluir GC',
       detalhes: error.message
     });
   }
