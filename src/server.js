@@ -1,25 +1,23 @@
-import express from "express"
-import cors from "cors"
-import routes from "./api/routes.js"
-import auth from './db/auth.js';
+import express from "express";
+import cors from "cors";
+import routes from "./api/routes.js";
+import auth from "./db/auth.js";
 
-const app = express()
-const port = process.env.PORT || 5000; // Usando a variável de ambiente PORT, se disponível
+const app = express();
+const PORT = 3001;
 
+// Middleware JSON
+app.use(express.json());
+app.use(cors());
 
-//Middleare JSON
-app.use(express.json())
-app.use(cors())
+// Rotas
+app.use("/api", routes);
+app.use("/auth", auth);
 
-//app.use(routes)
-app.use('/api', routes);
-app.use('/auth', auth); // Rotas de autenticação separadas
+app.get("/", function (req, res) {
+  res.status(200).send("Backend Lagoinha rodando");
+});
 
-//Rotas
-app.get("/", function(req, res) {
-    res.status(200).send("listando usuários")
-})
-
-app.listen(5000, function(){
-    console.log(`Backend em execução em http://localhost:${port}`)
-})
+app.listen(PORT, function () {
+  console.log(`Backend em execução em http://localhost:${PORT}`);
+});
