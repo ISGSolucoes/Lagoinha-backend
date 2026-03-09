@@ -7,6 +7,7 @@ import situation from "./situation.js";
 import userType from "./userType.js";
 import locations from "./locations.js";
 import growthGroup from "./growthGroup.js";
+import member from "./member.js";
 
 const router = express.Router();
 
@@ -17,5 +18,6 @@ router.use("/situation", situation);
 router.use("/userType", userType);
 router.use("/locations", locations);
 router.use("/growthGroup", growthGroup);
+router.use("/member", member);
 
 export default router;

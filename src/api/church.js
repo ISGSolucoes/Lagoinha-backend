@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
 
   try {
     const query = `
-      SELECT A.CD_IGREJA as ID, A.FANTASIA as LABEL, A.CD_CIDADE, B.nome||'-'||B.uf AS LOCALIZACAO, A.CNPJ, A.fone, A.email, C.nome AS SITUACAO
+      SELECT A.CD_IGREJA as ID, A.FANTASIA as LABEL, A.UF, A.CD_CIDADE, B.nome||'-'||B.uf AS LOCALIZACAO, A.CNPJ, A.fone, A.email, C.nome AS SITUACAO
         FROM IGREJA A
        INNER JOIN CIDADE B ON B.cd_cidade = A.cd_cidade
        INNER JOIN SITUACAO C ON C.cd_situacao = A.cd_situacao

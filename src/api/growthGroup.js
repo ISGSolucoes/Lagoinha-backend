@@ -44,7 +44,7 @@ router.get("/", async (req, res) => {
         A.CD_COLIDER,
         E.NOME AS NOME_COLIDER,
         A.EMAIL,
-        A.DT_REUNIAO
+        A.DIA_SEMANA_REUNIAO
       FROM GRUPO_CRESCIMENTO A
       LEFT JOIN IGREJA B
         ON B.CD_IGREJA = A.CD_IGREJA
@@ -99,7 +99,7 @@ router.get("/:id", async (req, res) => {
         A.CD_COLIDER,
         E.NOME AS NOME_COLIDER,
         A.EMAIL,
-        A.DT_REUNIAO
+        A.DIA_SEMANA_REUNIAO
       FROM GRUPO_CRESCIMENTO A
       LEFT JOIN IGREJA B
         ON B.CD_IGREJA = A.CD_IGREJA
@@ -144,7 +144,7 @@ router.post("/", async (req, res) => {
       CD_SITUACAO,
       CD_LIDER,
       EMAIL,
-      DT_REUNIAO,
+      DIA_SEMANA_REUNIAO,
       CD_COLIDER,
       DESCRICAO,
     } = req.body;
@@ -177,7 +177,7 @@ router.post("/", async (req, res) => {
         CD_SITUACAO,
         CD_LIDER,
         EMAIL,
-        DT_REUNIAO,
+        DIA_SEMANA_REUNIAO,
         CD_COLIDER,
         DESCRICAO,
         DATA_ATUALIZACAO
@@ -198,7 +198,7 @@ router.post("/", async (req, res) => {
       CD_SITUACAO,
       CD_LIDER || null,
       EMAIL || null,
-      DT_REUNIAO || null,
+      DIA_SEMANA_REUNIAO || null,
       CD_COLIDER || null,
       DESCRICAO || null,
     ]);
@@ -242,7 +242,7 @@ router.put("/:id", async (req, res) => {
       CD_SITUACAO,
       CD_LIDER,
       EMAIL,
-      DT_REUNIAO,
+      DIA_SEMANA_REUNIAO,
       CD_COLIDER,
       DESCRICAO,
     } = req.body;
@@ -271,7 +271,7 @@ router.put("/:id", async (req, res) => {
         CD_SITUACAO = ?,
         CD_LIDER = ?,
         EMAIL = ?,
-        DT_REUNIAO = ?,
+        DIA_SEMANA_REUNIAO = ?,
         CD_COLIDER = ?,
         DESCRICAO = ?,
         DATA_ATUALIZACAO = CURRENT_TIMESTAMP
@@ -290,7 +290,7 @@ router.put("/:id", async (req, res) => {
       CD_SITUACAO,
       CD_LIDER || null,
       EMAIL || null,
-      DT_REUNIAO || null,
+      DIA_SEMANA_REUNIAO || null,
       CD_COLIDER || null,
       DESCRICAO || null,
       id,
