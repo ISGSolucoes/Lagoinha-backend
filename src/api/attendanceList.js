@@ -16,12 +16,13 @@ router.get("/members/:cdIgreja/:cdGc", async (req, res) => {
         'Ativo' as SITUACAO 
       FROM MEMBRO 
       WHERE CD_IGREJA = ? 
-      AND CD_SITUACAO = 1
+        AND CD_GC = ?
+        AND CD_SITUACAO = 1
       ORDER BY NOME
     `;
         // Nota: Ajuste o WHERE conforme sua regra de quem deve aparecer na lista do GC
 
-        const result = await executeQuery(query, [cdIgreja]);
+        const result = await executeQuery(query, [cdIgreja, cdGc]);
         return res.json(result);
     } catch (error) {
         return res.status(500).json({ erro: "Erro ao carregar membros", detalhes: error.message });
@@ -36,7 +37,9 @@ router.get("/history", async (req, res) => {
         const query = `
       SELECT CD_MEMBRO, FL_PRESENCA 
       FROM LISTA_FREQUENCIA 
-      WHERE CD_IGREJA = ? AND CD_GC = ? AND CAST(DT_EVENTO AS DATE) = ?
+      WHERE CD_IGREJA = ? 
+        AND CD_GC = ? 
+        AND CAST(DT_EVENTO AS DATE) = ?
     `;
 
         const result = await executeQuery(query, [cdIgreja, cdGc, data]);
