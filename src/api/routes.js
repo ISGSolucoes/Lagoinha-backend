@@ -8,6 +8,7 @@ import userType from "./userType.js";
 import locations from "./locations.js";
 import growthGroup from "./growthGroup.js";
 import member from "./member.js";
+import attendanceList from "./attendanceList.js";
 
 const router = express.Router();
 
@@ -19,5 +20,6 @@ router.use("/userType", userType);
 router.use("/locations", locations);
 router.use("/growthGroup", growthGroup);
 router.use("/member", member);
+router.use("/attendance", attendanceList);
 
 export default router;
