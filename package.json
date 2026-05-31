@@ -2,10 +2,11 @@
   "type": "module",
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.cjs",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "build": "echo 'Backend deployment ready'"
   },
   "author": "",
   "license": "ISC",

@@ -1,4 +1,5 @@
 // test-connection.js
+import "../patch-os.js";
 import { executeQuery } from "../config/database.js";
 
 async function testConnection() {

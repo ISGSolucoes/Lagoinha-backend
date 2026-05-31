@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { cadastrarUsuario, verificarCredenciais } from "./users.js";
+import { criptografar, descriptografar } from "../config/criptografia.js";
 import members from "./members.js";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -205,5 +206,32 @@ router.put("/perfil", async (req, res) => {
     });
   }
 });
+
+router.get("/criptografar", function (req, res) {
+  if (req.query.password) {
+    console.log("Password:", req.query.password);
+    const senha = criptografar(req.query.password);
+    console.log("Senha Criptografada:", senha);
+
+    res.status(200).json(senha);
+  } else {
+    res.status(400).json({ erro: "Parâmetro password não informado" });
+  }
+});
+
+
+
+router.get("/descriptografar", function (req, res) {
+  if (req.query.password) {
+    console.log("Password:", req.query.password);
+    const senha = descriptografar(req.query.password);
+    console.log("Senha Descriptografada:", senha);
+
+    res.status(200).json(senha);
+  } else {
+    res.status(400).json({ erro: "Parâmetro password não informado" });
+  }
+});
+
 
 export default router;

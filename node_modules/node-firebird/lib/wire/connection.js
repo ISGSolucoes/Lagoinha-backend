@@ -1,5 +1,4 @@
 const Events = require('events');
-const net = require('net');
 const os = require('os');
 const path = require('path');
 const BigInt = require('big-integer');
@@ -15,6 +14,7 @@ const Database = require('./database');
 const Statement = require('./statement');
 const Transaction = require('./transaction');
 const {lookupMessages, noop, parseDate} = require('../utils');
+const Socket = require("./socket");
 
 /***************************************
  *
@@ -32,13 +32,14 @@ var Connection = function (host, port, callback, options, db, svc) {
     this._detachTimeout;
     this._detachCallback;
     this._detachAuto;
-    this._socket = net.createConnection(port, host);
+    this._socket = new Socket(port, host);
     this._pending = [];
     this._isOpened = false;
     this._isClosed = false;
     this._isDetach = false;
     this._isUsed = false;
     this._pooled = options.isPool||false;
+    if (options && options.blobChunkSize > 65535) options.blobChunkSize = 65535;
     this.options = options;
     this._bind_events(host, port, callback);
     this.error;
@@ -368,12 +369,14 @@ function decodeResponse(data, callback, cnx, lowercase_keys, cb) {
                     protocolVersion: data.readInt(),
                     protocolArchitecture: data.readInt(),
                     protocolMinimumType: data.readInt(),
+                    compress: false,
                     pluginName: '',
                     authData: '',
                     sessionKey: ''
                 };
 
-                accept.protocolMinimumType = accept.protocolMinimumType & 0xFF;
+                accept.compress = (accept.protocolMinimumType & Const.pflag_compress) !== 0;
+                accept.protocolMinimumType = accept.protocolMinimumType & Const.ptype_mask;
                 //accept.compress = (accept.acceptType & pflag_compress) !== 0; // TODO Handle zlib compression
                 if (accept.protocolVersion < 0) {
                     accept.protocolVersion = (accept.protocolVersion & Const.FB_PROTOCOL_MASK) | Const.FB_PROTOCOL_FLAG;
@@ -448,6 +451,10 @@ function decodeResponse(data, callback, cnx, lowercase_keys, cb) {
                         accept.authData = '';
                         accept.sessionKey = '';
                     }
+                }
+
+                if (accept.compress) {
+                    cnx._socket.enableCompression();
                 }
 
                 return cb(undefined, accept);
@@ -577,7 +584,7 @@ Connection.prototype.sendOpContAuth = function(authData, authDataEnc, pluginName
     this._socket.write(msg.getData());
 }
 
-Connection.prototype._queueEvent = function(callback){
+Connection.prototype._queueEvent = function(callback, defer = false){
     var self = this;
 
     if (self._isClosed) {
@@ -586,8 +593,14 @@ Connection.prototype._queueEvent = function(callback){
         return;
     }
 
-    self._queue.push(callback);
-    self._socket.write(self._msg.getData());
+    const canDefer = defer && this.accept.protocolVersion >= Const.PROTOCOL_VERSION11;
+
+    self._socket.write(self._msg.getData(), canDefer);
+    if (canDefer && callback) {
+        callback();
+    } else {
+        self._queue.push(callback);
+    }
 };
 
 Connection.prototype.connect = function (options, callback) {
@@ -633,7 +646,11 @@ Connection.prototype.connect = function (options, callback) {
         msg.addInt(protocol[0]); // Version
         msg.addInt(protocol[1]); // Architecture
         msg.addInt(protocol[2]); // Min type
-        msg.addInt(protocol[3]); // Max type
+        if (protocol[0] >= Const.PROTOCOL_VERSION13 && options.wireCompression) {
+            msg.addInt(protocol[3] | Const.pflag_compress); // Max type with compress flag
+        } else {
+            msg.addInt(protocol[3]); // Max type
+        }
         msg.addInt(protocol[4]); // Preference weight
     }
 
@@ -845,13 +862,33 @@ Connection.prototype.throwClosed = function(callback) {
     return this;
 };
 
-Connection.prototype.startTransaction = function(isolation, callback) {
+Connection.prototype.startTransaction = function(options, callback) {
 
-    if (typeof(isolation) === 'function') {
-        var tmp = isolation;
-        isolation = callback;
+    if (typeof(options) === 'function') {
+        var tmp = options;
+        options = callback;
         callback = tmp;
     }
+
+    // Compatibility
+    if (Array.isArray(options)) {
+        options = {
+            isolation: options,
+            readOnly: (options === Const.ISOLATION_READ_COMMITTED_READ_ONLY),
+        };
+    }
+
+    // Default options
+    options = Object.assign({
+        autoCommit: false,
+        autoUndo: true,
+        isolation: Const.ISOLATION_READ_COMMITTED,
+        ignoreLimbo: false,
+        //lock: [],
+        readOnly: false,
+        wait: true,
+        waitTimeout: 0,
+    }, options);
 
     if (this._isClosed)
         return this.throwClosed(callback);
@@ -865,13 +902,44 @@ Connection.prototype.startTransaction = function(isolation, callback) {
     blr.pos = 0;
     msg.pos = 0;
 
-    blr.addBytes(isolation || Const.ISOLATION_REPEATABLE_READ);
+    blr.addByte(Const.isc_tpb_version3);
+    blr.addBytes(options.isolation);
+    blr.addByte(options.readOnly ? Const.isc_tpb_read : Const.isc_tpb_write);
+    if (options.wait) {
+        blr.addByte(Const.isc_tpb_wait);
+
+        if (options.waitTimeout) {
+            blr.addNumeric(Const.isc_tpb_lock_timeout, options.waitTimeout);
+        }
+    } else {
+        blr.addByte(Const.isc_tpb_nowait);
+    }
+    if (!options.autoUndo) {
+        blr.addByte(Const.isc_tpb_no_auto_undo);
+    }
+    if (options.autoCommit) {
+        blr.addByte(Const.isc_tpb_autocommit);
+    }
+    if (options.ignoreLimbo) {
+        blr.addByte(Const.isc_tpb_ignore_limbo);
+    }
+    // TODO
+    /*if (options.lock.length) {
+        for (let table of options.lock) {
+            const lockMode = table.write ? Const.isc_tpb_lock_write : Const.isc_tpb_lock_read;
+            const lockType = table.protected ? Const.isc_tpb_protected : Const.isc_tpb_shared;
+
+            blr.addString(lockMode, table.table || table, Const.DEFAULT_ENCODING);
+            blr.addByte(lockType);
+        }
+    }*/
+
     msg.addInt(Const.op_transaction);
     msg.addInt(this.dbhandle);
     msg.addBlr(blr);
     callback.response = new Transaction(this);
 
-    this.db.emit('transaction', isolation);
+    this.db.emit('transaction', options);
     this._queueEvent(callback);
 };
 
@@ -966,7 +1034,8 @@ Connection.prototype.dropStatement = function (statement, callback) {
     msg.addInt(Const.op_free_statement);
     msg.addInt(statement.handle);
     msg.addInt(Const.DSQL_drop);
-    this._queueEvent(callback);
+
+    this._queueEvent(callback, true);
 };
 
 Connection.prototype.closeStatement = function (statement, callback) {
@@ -983,7 +1052,7 @@ Connection.prototype.closeStatement = function (statement, callback) {
     msg.addInt(statement.handle);
     msg.addInt(Const.DSQL_close);
 
-    this._queueEvent(callback);
+    this._queueEvent(callback, true);
 };
 
 Connection.prototype.allocateAndPrepareStatement = function (transaction, query, plan, callback) {
@@ -1259,8 +1328,11 @@ Connection.prototype.executeStatement = function(transaction, statement, params,
                 else if (!isStream)
                     b = Buffer.from(JSON.stringify(value), Const.DEFAULT_ENCODING);
 
+                // Use configured transfer size or default to 1024
+                var chunkSize = self.options.blobChunkSize || 1024;
+
                 if (Buffer.isBuffer(b)) {
-                    bufferReader(b, 1024, function(b, next) {
+                    bufferReader(b, chunkSize, function (b, next) {
                         self.batchSegments(blob, b, next);
                     }, function() {
                         ret[index] = new Xsql.SQLParamQuad(blob.oid);
@@ -1273,9 +1345,20 @@ Connection.prototype.executeStatement = function(transaction, statement, params,
                 var isEnd = false;
 
                 value.on('data', function(chunk) {
+                    // Optimization: If chunk is smaller than transfer size, send directly
+                    if (chunk.length <= chunkSize) {
+                        self.batchSegments(blob, chunk, function () {
+                            if (isEnd && !isReading) {
+                                ret[index] = new Xsql.SQLParamQuad(blob.oid);
+                                self.closeBlob(blob, callback);
+                            }
+                        });
+                        return;
+                    }
+
                     value.pause();
                     isReading = true;
-                    bufferReader(chunk, 1024, function(b, next) {
+                    bufferReader(chunk, chunkSize, function (b, next) {
                         self.batchSegments(blob, b, next);
                     }, function() {
                         isReading = false;
@@ -1292,8 +1375,12 @@ Connection.prototype.executeStatement = function(transaction, statement, params,
                     isEnd = true;
                     if (isReading)
                         return;
-                    ret[index] = new Xsql.SQLParamQuad(blob.oid);
-                    self.closeBlob(blob, callback);
+                    // If we are not currently reading (paused), close immediately
+                    // If we are reading, the callback in batchSegments/bufferReader will handle closure
+                    if (!isReading) {
+                        ret[index] = new Xsql.SQLParamQuad(blob.oid);
+                        self.closeBlob(blob, callback);
+                    }
                 });
             });
         }
@@ -1717,7 +1804,7 @@ Connection.prototype.closeBlob = function(blob, callback) {
     msg.pos = 0;
     msg.addInt(Const.op_close_blob);
     msg.addInt(blob.handle);
-    this._queueEvent(callback);
+    this._queueEvent(callback, true);
 };
 
 Connection.prototype.getSegment = function(blob, callback) {

@@ -1,10 +1,11 @@
+import "./patch-os.js";
 import express from "express";
 import cors from "cors";
 import routes from "./api/routes.js";
 import auth from "./db/auth.js";
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware JSON
 app.use(express.json());
